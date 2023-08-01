@@ -1,0 +1,391 @@
+AWSTemplateFormatVersion: "2010-09-09"
+#Description: "Cloudformation Template for creating AWS Glue Database, Tables, Classifier, Crawler, Glue jobs, IAM Roles and S3 Bucket with folders"
+Resources:
+    Datacatalogsettings:
+        Type: 'AWS::Glue::DataCatalogEncryptionSettings'
+        Properties:
+          CatalogId: !Ref "AWS::AccountId"
+          DataCatalogEncryptionSettings:
+            ConnectionPasswordEncryption:
+             ReturnConnectionPasswordEncrypted: True
+            EncryptionAtRest:
+             CatalogEncryptionMode: "SSE-KMS"
+    GlueDatabase:
+        Type: "AWS::Glue::Database"
+        Properties:
+            DatabaseInput: 
+                Name: "documentextract"
+                Description: Database to hold extracted content from documents
+            CatalogId: !Ref "AWS::AccountId"
+
+    GlueClassifier:
+        Type: "AWS::Glue::Classifier"
+        Properties:
+            CsvClassifier: 
+                Name: "cms_csv_classifier"
+                AllowSingleColumn: false
+                ContainsHeader: "UNKNOWN"
+                Delimiter: ","
+                DisableValueTrimming: false
+                QuoteSymbol: "\""
+    GlueTable1:
+        DependsOn: GlueDatabase
+        Type: AWS::Glue::Table
+        Properties:
+            DatabaseName: !Ref GlueDatabase
+            CatalogId: !Ref "AWS::AccountId"
+            TableInput: 
+                Owner: "owner"
+                Description: Hold metadata related to key values
+                TableType: "EXTERNAL_TABLE"
+                Parameters: 
+                    CrawlerSchemaDeserializerVersion: "1.0"
+                    CrawlerSchemaSerializerVersion: "1.0"
+                    UPDATED_BY_CRAWLER: !Ref GlueCrawlerKeyValuesData
+                    areColumnsQuoted: "false"
+                    averageRecordSize: "239"
+                    classification: "csv"
+                    columnsOrdered: "true"
+                    compressionType: "bzip2"
+                    delimiter: ","
+                    objectCount: "20"
+                    recordCount: "165954"
+                    sizeKey: "40341559"
+                    "skip.header.line.count": "1"
+                    typeOfData: "file"
+                StorageDescriptor: 
+                    Columns: 
+                      - 
+                        Name: "patientname"
+                        Type: "string"
+                      - 
+                        Name: "federaltaxid"
+                        Type: "string"
+                      - 
+                        Name: "totalcharge"
+                        Type: "string"
+                      - 
+                        Name: "patientaddress"
+                        Type: "string"
+                      - 
+                        Name: "city"
+                        Type: "string"
+                      - 
+                        Name: "state"
+                        Type: "string"
+                      - 
+                        Name: "zipcode"
+                        Type: "string"
+                    Location: 
+                            Fn::Sub:
+                            - 's3://${BucketName}/keyvalues/'
+                            - BucketName: !ImportValue TextractDocumentOutputS3Bucket
+                    InputFormat: "org.apache.hadoop.mapred.TextInputFormat"
+                    OutputFormat: "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
+                    Compressed: true
+                    NumberOfBuckets: -1
+                    SerdeInfo: 
+                        SerializationLibrary: "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"
+                        Parameters: 
+                            "field.delim": ","
+                    Parameters: 
+                        CrawlerSchemaDeserializerVersion: "1.0"
+                        CrawlerSchemaSerializerVersion: "1.0"
+                        UPDATED_BY_CRAWLER: !Ref GlueCrawlerKeyValuesData
+                        areColumnsQuoted: "false"
+                        averageRecordSize: "239"
+                        classification: "csv"
+                        columnsOrdered: "true"
+                        compressionType: "bzip2"
+                        delimiter: ","
+                        objectCount: "20"
+                        recordCount: "1"
+                        sizeKey: "40341559"
+                        "skip.header.line.count": "1"
+                        typeOfData: "file"
+                    StoredAsSubDirectories: false
+                Retention: 0
+                Name: "keyvalues"
+
+    GlueTable2:
+        DependsOn: GlueDatabase
+        Type: "AWS::Glue::Table"
+        Properties:
+            DatabaseName: !Ref GlueDatabase
+            CatalogId: !Ref "AWS::AccountId"
+            TableInput: 
+                Owner: "owner"
+                Description: Hold metadata related to table values
+                TableType: "EXTERNAL_TABLE"
+                Parameters: 
+                    CrawlerSchemaDeserializerVersion: "1.0"
+                    CrawlerSchemaSerializerVersion: "1.0"
+                    UPDATED_BY_CRAWLER: !Ref GlueCrawlerTableValuesData
+                    areColumnsQuoted: "false"
+                    averageRecordSize: "1343"
+                    classification: "csv"
+                    columnsOrdered: "true"
+                    compressionType: "bzip2"
+                    delimiter: ","
+                    objectCount: "40"
+                    recordCount: "2905874"
+                    sizeKey: "3930505238"
+                    "skip.header.line.count": "2"
+                    typeOfData: "file"
+                StorageDescriptor: 
+                    Columns: 
+                      - 
+                        Name: "frommonth"
+                        Type: "string"
+                      - 
+                        Name: "fromdate"
+                        Type: "string"
+                      - 
+                        Name: "fromyear"
+                        Type: "string"
+                      - 
+                        Name: "tomonth"
+                        Type: "string"
+                      - 
+                        Name: "todate"
+                        Type: "string"
+                      - 
+                        Name: "toyear"
+                        Type: "string"
+                      - 
+                        Name: "placeofservice"
+                        Type: "string"
+                      - 
+                        Name: "emg"
+                        Type: "string"
+                      - 
+                        Name: "opthcpcs"
+                        Type: "string"
+                      - 
+                        Name: "opthcpcs2"
+                        Type: "string"
+                      - 
+                        Name: "modier"
+                        Type: "string"
+                      - 
+                        Name: "modier2"
+                        Type: "string"
+                      - 
+                        Name: "modier3"
+                        Type: "string"
+                      - 
+                        Name: "diagnosispointer"
+                        Type: "string"
+                      - 
+                        Name: "charges"
+                        Type: "string"
+                      - 
+                        Name: "charges2"
+                        Type: "string"
+                      - 
+                        Name: "daysor"
+                        Type: "string"
+                      - 
+                        Name: "hc"
+                        Type: "string"
+                      - 
+                        Name: "give"
+                        Type: "string"
+                      - 
+                        Name: "providerid"
+                        Type: "string"
+                      - 
+                        Name: "patientname"
+                        Type: "string"                        
+                    Location: 
+                            Fn::Sub:
+                            - 's3://${BucketName}/tablevalues/'
+                            - BucketName: !ImportValue TextractDocumentOutputS3Bucket                    
+                    InputFormat: "org.apache.hadoop.mapred.TextInputFormat"
+                    OutputFormat: "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
+                    Compressed: true
+                    NumberOfBuckets: -1
+                    SerdeInfo: 
+                        SerializationLibrary: "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"
+                        Parameters: 
+                            "field.delim": ","
+                    Parameters: 
+                        CrawlerSchemaDeserializerVersion: "1.0"
+                        CrawlerSchemaSerializerVersion: "1.0"
+                        UPDATED_BY_CRAWLER: !Ref GlueCrawlerTableValuesData
+                        areColumnsQuoted: "false"
+                        averageRecordSize: "1343"
+                        classification: "csv"
+                        columnsOrdered: "true"
+                        compressionType: "bzip2"
+                        delimiter: ","
+                        objectCount: "40"
+                        recordCount: "1"
+                        sizeKey: "3930505238"
+                        "skip.header.line.count": "2"
+                        typeOfData: "file"
+                    StoredAsSubDirectories: false
+                Retention: 0
+                Name: "tablevalues"
+    CMSGlueServiceRole01:
+        Type: "AWS::IAM::Role"
+        Properties:
+            Path: "/service-role/"
+            Description: "Role for Glue Service"
+            AssumeRolePolicyDocument: "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"glue.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}"
+            Policies:
+                - PolicyName: !Sub 'AWSServicePolicy-${AWS::Region}'
+                  PolicyDocument:
+                    Version: 2012-10-17
+                    Statement:
+                      - Effect: Allow
+                        Action:
+                          - "s3:GetObject"
+                          - "s3:PutObject"
+                          - "s3:ListBucket"
+                          - "s3:DeleteObject"
+                        Resource:
+                            Fn::Sub:
+                            - 'arn:aws:s3:::${BucketName}'
+                            -  BucketName: !ImportValue TextractDocumentOutputS3Bucket 
+                            Fn::Sub:
+                            - 'arn:aws:s3:::${BucketName}/*'
+                            -  BucketName: !ImportValue TextractDocumentOutputS3Bucket 
+                       
+                         
+            MaxSessionDuration: 3600
+            ManagedPolicyArns: 
+              - "arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole"
+            Path: "/"
+    AthenaQueryS3Bucket:
+        Type: "AWS::S3::Bucket"
+        DeletionPolicy: Retain
+        Properties:
+            BucketName: !Sub 'athenaqueryresults-${AWS::Region}-${AWS::AccountId}'
+            AccessControl: Private
+            VersioningConfiguration:
+              Status: Enabled
+            LoggingConfiguration:
+                DestinationBucketName: 
+                    Fn::ImportValue: TextractDocumentS3BucketLogs    
+                LogFilePrefix: query-logs
+            BucketEncryption:
+              ServerSideEncryptionConfiguration:
+               - ServerSideEncryptionByDefault:
+                   SSEAlgorithm: 'aws:kms'
+                   KMSMasterKeyID: !ImportValue KeyArn
+            PublicAccessBlockConfiguration:
+              BlockPublicAcls: true
+              BlockPublicPolicy: true
+              IgnorePublicAcls: true
+              RestrictPublicBuckets: true
+            Tags:
+              - Key: Resource
+                Value: "athena query logs"
+    AthenaQueryS3BucketPolicy:
+      Type: 'AWS::S3::BucketPolicy'
+      DependsOn: 
+        - AthenaQueryS3Bucket
+        #- LoggingBucket      
+      Properties:
+        Bucket: !Ref AthenaQueryS3Bucket
+        PolicyDocument:
+          Statement:
+            - Action:
+               - s3:PutObject
+               - s3:DeleteObject
+               - s3:List*            
+              Effect: Allow
+              Resource: 
+               - !Sub arn:aws:s3:::${AthenaQueryS3Bucket}/*
+               - !Sub arn:aws:s3:::${AthenaQueryS3Bucket}                                             
+              Principal: 
+                  Service:
+                  - athena.amazonaws.com
+    GlueCrawlerKeyValuesData:
+        Type: "AWS::Glue::Crawler"
+        Properties:
+            Name: "key_values_data_crawler"
+            Role: !Ref CMSGlueServiceRole01
+            Targets: 
+                S3Targets: 
+                  - 
+                    Path: 
+                            Fn::Sub:
+                            - 's3://${BucketName}/keyvalues'
+                            - BucketName: !ImportValue TextractDocumentOutputS3Bucket                         
+            DatabaseName: !Ref GlueDatabase
+            Classifiers: 
+              - !Ref GlueClassifier
+            SchemaChangePolicy: 
+                UpdateBehavior: "UPDATE_IN_DATABASE"
+                DeleteBehavior: "DEPRECATE_IN_DATABASE"
+
+    GlueCrawlerTableValuesData:
+        Type: "AWS::Glue::Crawler"
+        Properties:
+            Name: "table_values_data_crawler"
+            Role: !Ref CMSGlueServiceRole01
+            Targets: 
+                S3Targets: 
+                  - 
+                    Path: 
+                            Fn::Sub:
+                            - 's3://${BucketName}/tablevalues'
+                            - BucketName: !ImportValue TextractDocumentOutputS3Bucket                      
+            DatabaseName: !Ref GlueDatabase
+            SchemaChangePolicy: 
+                UpdateBehavior: "UPDATE_IN_DATABASE"
+                DeleteBehavior: "DEPRECATE_IN_DATABASE"
+    AthenaNamedQuery1:
+        Type: "AWS::Athena::NamedQuery"
+        DependsOn: MyAthenaWorkGroup
+        Properties:
+            Name: "document_extract_view"
+            Description: "document_extract_view"
+            Database: !Ref GlueDatabase
+            WorkGroup: !Ref MyAthenaWorkGroup
+            QueryString: |
+                    CREATE OR REPLACE VIEW "document_view" AS 
+                    SELECT
+                      a.*
+                    , b.*
+                    FROM
+                      ((
+                       SELECT
+                         patientname
+                       , patientaddress
+                       , city
+                       , state
+                       , zipcode
+                       , "replace"(totalcharge, '-', '') totalcharge
+                       , federaltaxid
+                       FROM
+                         "documentextract"."keyvalues"
+                    )  a
+                    INNER JOIN (
+                       SELECT
+                         "concat"(frommonth, fromdate, fromyear) dateofservice
+                       , opthcpcs Procedure
+                       , charges
+                       , providerid
+                       , patientname tablevaluepatientname
+                       FROM
+                         "documentextract"."tablevalues"
+                       WHERE ((providerid IS NOT NULL) AND ("trim"(providerid) <> ''))
+                    )  b ON (a.patientname = b.tablevaluepatientname)) 
+    MyAthenaWorkGroup:
+      Type: AWS::Athena::WorkGroup
+      Properties:
+        Name: MyCustomWorkGroup
+        Description: My WorkGroup
+        State: ENABLED
+        WorkGroupConfiguration:
+          BytesScannedCutoffPerQuery: 200000000
+          EnforceWorkGroupConfiguration: false
+          PublishCloudWatchMetricsEnabled: false
+          EngineVersion:
+            SelectedEngineVersion: Athena engine version 2
+          RequesterPaysEnabled: true
+          ResultConfiguration:
+            OutputLocation: !Sub "s3://${AthenaQueryS3Bucket}/"

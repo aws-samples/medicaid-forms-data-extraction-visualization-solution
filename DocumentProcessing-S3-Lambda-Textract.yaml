@@ -1,0 +1,842 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Template to setup Document processing resources 
+Resources:
+  DDBEmailTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    Properties:
+      AttributeDefinitions:
+        -
+          AttributeName: "email_id"
+          AttributeType: "S"
+        -
+          AttributeName: "documentname"
+          AttributeType: "S"          
+      KeySchema:
+        -
+          AttributeName: "email_id"
+          KeyType: "HASH"
+        -
+          AttributeName: "documentname"
+          KeyType: "RANGE"     
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+        KMSMasterKeyId: !ImportValue KeyAliasName
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+  DDBRawDataTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    Properties:
+      AttributeDefinitions:
+        -
+          AttributeName: "email_id"
+          AttributeType: "S"
+        -
+          AttributeName: "documentname"
+          AttributeType: "S"          
+      KeySchema:
+        -
+          AttributeName: "email_id"
+          KeyType: "HASH"
+        -
+          AttributeName: "documentname"
+          KeyType: "RANGE" 
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS        
+        KMSMasterKeyId: !ImportValue KeyAliasName
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true        
+  TextractDocumentUpload:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    DependsOn:
+      - S3BucketLogs
+      - TextractDemoFunctionsUploadLambdaFunction
+    Properties:
+      BucketName: !Sub textract-demo-docupload-${AWS::Region}-${AWS::AccountId}
+      VersioningConfiguration:
+        Status: Enabled      
+      BucketEncryption:
+              ServerSideEncryptionConfiguration:
+               - ServerSideEncryptionByDefault:
+                  #SSEAlgorithm: AES256
+                   SSEAlgorithm: 'aws:kms'
+                   KMSMasterKeyID: !ImportValue KeyArn   
+      AccessControl: BucketOwnerFullControl
+      LoggingConfiguration:
+        DestinationBucketName: !Ref S3BucketLogs
+        LogFilePrefix: !Sub "/logs/!Sub textract-demo-docupload-${AWS::Region}-${AWS::AccountId}/"
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Function: !GetAtt TextractDemoFunctionsUploadLambdaFunction.Arn
+            Event:  s3:ObjectCreated:Put          
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        -
+          Key: Purpose
+          Value: Documents Upload
+  TextractDocumentUploadBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref TextractDocumentUpload
+      PolicyDocument:
+        Id: MyPolicy
+        Version: 2012-10-17
+        Statement:
+          - Sid: AllowWrite
+            Effect: Deny
+            Principal:
+              Service: 
+                - lambda.amazonaws.com
+            Action: 's3:GetObject*'
+            Resource: !Sub 'arn:aws:s3:::${TextractDocumentUpload}/*'
+            Condition:
+              Bool:
+                'aws:SecureTransport"': 'false'                  
+  TextractDocumentOutput:
+    Type: "AWS::S3::Bucket"
+    DeletionPolicy: Retain
+    DependsOn:
+      - S3BucketLogs       
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled        
+      BucketName: !Sub textract-demo-output-${AWS::Region}-${AWS::AccountId}
+      BucketEncryption:
+              ServerSideEncryptionConfiguration:
+               - ServerSideEncryptionByDefault:
+                  #SSEAlgorithm: AES256
+                   SSEAlgorithm: 'aws:kms'
+                   KMSMasterKeyID: !ImportValue KeyArn                
+      AccessControl: BucketOwnerFullControl
+      LoggingConfiguration:
+        DestinationBucketName: !Ref S3BucketLogs
+        LogFilePrefix: !Sub "/logs/!Sub textract-demo-output-${AWS::Region}-${AWS::AccountId}/"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        -
+          Key: Purpose
+          Value: Extracted Ouput
+  TextractDocumentOutputBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref TextractDocumentOutput
+      PolicyDocument:
+        Id: MyPolicy
+        Version: 2012-10-17
+        Statement:
+          - Sid: AllowWrite
+            Effect: Deny
+            Principal:
+              Service: 
+                - lambda.amazonaws.com
+            Action: 's3:PutObject*'
+            Resource: !Sub 'arn:aws:s3:::${TextractDocumentOutput}/*'
+            Condition:
+              Bool:
+                'aws:SecureTransport"': 'false'                 
+  S3BucketLogs:
+    Type: AWS::S3::Bucket
+    Metadata:
+        cfn_nag:
+            rules_to_suppress:
+            - id: W35
+              reason: "This Bucket is for access logging from other buckets."        
+    DeletionPolicy: Retain
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled        
+      BucketName: !Sub textract-demo-access-logs-${AWS::Region}-${AWS::AccountId}
+      AccessControl: BucketOwnerFullControl
+      BucketEncryption:
+              ServerSideEncryptionConfiguration:
+               - ServerSideEncryptionByDefault:
+                  #SSEAlgorithm: AES256
+                   SSEAlgorithm: 'aws:kms'
+                   KMSMasterKeyID: !ImportValue KeyArn               
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        -
+          Key: Description
+          Value: S3 Access Logs
+  S3BucketLogsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref S3BucketLogs
+      PolicyDocument:
+        Id: MyPolicy
+        Version: 2012-10-17
+        Statement:
+          - Sid: AllowWrite
+            Effect: Deny
+            Principal:
+              Service: 
+                - s3.amazonaws.com
+            Action: 's3:PutObject*'
+            Resource: !Sub 'arn:aws:s3:::${S3BucketLogs}/*'
+            Condition:
+              Bool:
+                'aws:SecureTransport"': 'false'                                
+  TextractCallbackSNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: "textract-demo-functions-textract-callback" 
+      KmsMasterKeyId: !ImportValue KeyAliasName    
+      Subscription:
+          - Protocol: lambda
+            Endpoint: !GetAtt TextractDemoTextractCallbackLambdaFunction.Arn	      			  
+  TextractCallbackSNSTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref TextractCallbackSNSTopic
+      PolicyDocument:
+        Id: TextractCallbackSNSTopicPolicy
+        Version: "2012-10-17"
+        Statement:
+          -
+            Sid: S3TriggerAccess
+            Effect: Allow
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sns:Publish"
+              - "SNS:GetTopicAttributes" 
+              - "SNS:SetTopicAttributes"
+              - "SNS:AddPermission" 
+              - "sns:RemovePermission"
+              - "SNS:DeleteTopic" 
+              - "SNS:Subscribe"
+              - "SNS:ListSubscriptionsByTopic"                
+            Resource:
+              - !Ref TextractCallbackSNSTopic
+            Condition:
+              StringEquals:
+                 "AWS:SourceAccount": !Ref "AWS::AccountId"            
+              ArnLike:
+                 aws:SourceArn: !Sub arn:aws:s3:::textract-demo-output-${AWS::Region}-${AWS::AccountId}	              
+  TextractDemoFunctionsTextractServiceRole:
+    Type: "AWS::IAM::Role"
+    Properties:        
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "textract.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Path: "/"
+  TextractDemoFunctionsTextractPolicy: 
+    Type: "AWS::IAM::Policy"
+    Properties: 
+      PolicyName: "TextractDemoFunctionsTextractPolicy"     
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - Effect: Allow
+            Action:
+            - kms:generatedatakey
+            - kms:decrypt
+            Resource: !ImportValue KeyArn
+          - Effect: Allow
+            Action: sns:Publish
+            Resource: !Sub arn:aws:sns:${AWS::Region}:${AWS::AccountId}:textract-demo-functions-textract-callback	            
+          - Effect: Allow
+            Action: logs:CreateLogGroup
+            Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*
+          - Effect: Allow
+            Action:
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/Textract-demo-Functions-Upload:*            
+      Roles: 
+        - 
+          Ref: "TextractDemoFunctionsTextractServiceRole"
+  TextractDemoFunctionsUploadRole:
+    Type: "AWS::IAM::Role"
+    Metadata:
+        cfn_nag:
+            rules_to_suppress:
+            - id: W11
+              reason: "No resource level permissions for textract:GetDocumentAnalysis"      
+    Properties:      
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - Effect: "Allow"
+            Principal: 
+              Service: 
+                - "lambda.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Path: "/"
+      Policies:
+      - PolicyName: TextractDemoUploadRolePolicy-CWAccessPolicy
+        PolicyDocument:
+             Statement: [
+                  {
+                      "Effect": "Allow",
+                      "Action": "logs:CreateLogGroup",
+                      "Resource": !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+                  },
+                  {
+                      "Effect": "Allow",
+                      "Action": [
+                          "logs:CreateLogStream",
+                          "logs:PutLogEvents"
+                      ],
+                      "Resource": [
+                          !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/textract-demo-functions-upload:*"
+                      ]
+                  }
+              ]
+             Version: "2012-10-17"           
+      - PolicyName: TextractDemoUploadRolePolicyFunctionAccess
+        PolicyDocument: 
+            Version: "2012-10-17"
+            Statement: 
+            - Effect: Allow
+              Action:
+              - kms:generatedatakey
+              - kms:decrypt
+              Resource: !ImportValue KeyArn           
+            - Effect: Allow
+              Action: sns:Publish
+              Resource: !Sub arn:aws:sns:${AWS::Region}:${AWS::AccountId}:textract-demo-functions-textract-callback	
+            - Effect: Allow
+              Action: dynamodb:PutItem
+              Resource: !GetAtt DDBEmailTable.Arn   
+            - Effect: Allow
+              Action: textract:StartDocumentAnalysis
+              Resource: "*"           
+            - Effect: Allow
+              Action:
+              - s3:GetObject
+              - s3:ListBucket
+              Resource: 
+              - !Sub arn:aws:s3:::textract-demo-docupload-${AWS::Region}-${AWS::AccountId}
+              - !Sub arn:aws:s3:::textract-demo-docupload-${AWS::Region}-${AWS::AccountId}/*    
+  PermissionForTextractDemoUploadToInvokeLambda: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !GetAtt TextractDemoFunctionsUploadLambdaFunction.Arn 
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId      
+      SourceArn: !Sub arn:aws:s3:::textract-demo-docupload-${AWS::Region}-${AWS::AccountId}      
+  
+  TextractDemoFunctionsUploadLambdaFunction:
+    Type: AWS::Lambda::Function
+    Metadata:
+        cfn_nag:
+            rules_to_suppress:
+            - id: W92
+              reason: "Customer will enable reservedconcurrentlimit based on their use case" 
+            - id: W89
+              reason: "This is to demo document processing solution. Customer can update these sample templates to have lambda function deploy in VPC"
+            - id: W58
+              reason: "Lambda functions has permissions to write cloudwatch logs"                 
+    Properties: 
+      FunctionName: textract-demo-functions-upload
+      Handler: index.lambda_handler
+      Timeout: 900
+      MemorySize: 1024  
+      Role: !GetAtt TextractDemoFunctionsUploadRole.Arn
+      Environment:
+        Variables:
+          DOCUMENT_METADATA_DYNAMO_TABLE: !Ref DDBEmailTable
+          TEXTRACT_NOTIFICATION_ROLE_ARN: 
+                        Fn::GetAtt: 
+                          - "TextractDemoFunctionsTextractServiceRole"
+                          - "Arn"
+          TEXTRACT_NOTIFICATION_TOPIC_ARN: !Ref TextractCallbackSNSTopic
+      Code:
+        ZipFile: |
+          import json
+          import urllib.parse
+          import os
+          from datetime import datetime
+          import boto3
+          DOCUMENT_METADATA_DYNAMO_TABLE = os.environ['DOCUMENT_METADATA_DYNAMO_TABLE']
+          TEXTRACT_NOTIFICATION_TOPIC_ARN = os.environ['TEXTRACT_NOTIFICATION_TOPIC_ARN']
+          TEXTRACT_NOTIFICATION_ROLE_ARN = os.environ['TEXTRACT_NOTIFICATION_ROLE_ARN']
+          def lambda_handler(event, context):
+            if 'Records' not in event:
+                raise Exception('No Records section')
+            if len(event['Records']) != 1:
+                raise Exception('Expected only 1 record')
+            
+            bucket = event['Records'][0]['s3']['bucket']['name']
+            key = urllib.parse.unquote_plus(event['Records'][0]['s3']['object']['key'], encoding='utf-8')
+            
+            object_tag = urllib.parse.unquote_plus(event['Records'][0]['s3']['object']['eTag'], encoding='utf-8')
+            
+            dynamodb = boto3.client('dynamodb')           
+            source = "uploaded to Bucket " +bucket
+            now = datetime.now()
+            dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
+            
+            item = {
+                "email_id": {
+                    "S": object_tag
+                },
+                "subject": {
+                    "S": "uploaded to bucket"
+                },
+                "source": {
+                    "S": source
+                },
+                "documentname": {
+                    "S": key
+                },
+                "timestamp": {
+                    "S": dt_string
+                }
+            }
+            dynamodb.put_item(
+                TableName=DOCUMENT_METADATA_DYNAMO_TABLE,
+                Item=item,
+                ReturnValues='NONE'
+            )
+            textract = boto3.client('textract')
+            attachments = []
+            if(len(key)):	        
+                attachment_id = str(key)
+                #s3.copy_object(Bucket=ATTACHMENTS_BUCKET, Key=attachment_key, CopySource=bucket_name+"/"+object_key)
+                response = textract.start_document_analysis(    
+                  DocumentLocation={
+                        'S3Object': {
+                            'Bucket': bucket,
+                            'Name': key
+                        }
+                    },
+                    FeatureTypes=['FORMS', 'TABLES'],
+                    JobTag=object_tag,
+                    NotificationChannel={
+                        'SNSTopicArn': TEXTRACT_NOTIFICATION_TOPIC_ARN,
+                        'RoleArn': TEXTRACT_NOTIFICATION_ROLE_ARN
+                    }
+                )
+                attachments.append({
+                    'attachment_id': attachment_id,
+                    'key': key,
+                    'textract_job_id': response['JobId']
+                })
+            response = {
+                'email_id': object_tag,
+                'attachments': attachments
+            }
+            return response
+
+      Runtime: python3.9  	  		  
+  TextractDemoTextractCallbackRole:
+    Type: "AWS::IAM::Role"
+    Metadata:
+        cfn_nag:
+            rules_to_suppress:
+            - id: W11
+              reason: "No resource level permissions for textract:GetDocumentAnalysis"        
+    Properties:       
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "lambda.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Path: "/"
+      Policies:
+      - PolicyName: "TextractDemoTextractCallbackRole-CWAccessPolicy" 
+        PolicyDocument:
+             Statement: [
+                  {
+                      "Effect": "Allow",
+                      "Action": "logs:CreateLogGroup",
+                      "Resource": !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+                  },
+                  {
+                      "Effect": "Allow",
+                      "Action": [
+                          "logs:CreateLogStream",
+                          "logs:PutLogEvents"
+                      ],
+                      "Resource": [
+                          !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/textract-demo-functions-TextractCallback:*"
+                      ]
+                  }
+              ]
+             Version: '2012-10-17'                      
+      - PolicyName: TextractDemoTextractCallbackFunctionAccess
+        PolicyDocument: 
+            Version: "2012-10-17"
+            Statement: 
+              - Effect: Allow
+                Action:
+                - kms:generatedatakey
+                - kms:decrypt
+                Resource: !ImportValue KeyArn
+              - Effect: Allow
+                Action: dynamodb:PutItem
+                Resource: !GetAtt DDBRawDataTable.Arn
+              - Effect: Allow
+                Action: textract:GetDocumentAnalysis
+                Resource: "*"            
+              - Effect: Allow
+                Action:
+                - s3:GetObject
+                - s3:ListBucket
+                - s3:PutObject            
+                Resource: 
+                - !Sub arn:aws:s3:::textract-demo-output-${AWS::Region}-${AWS::AccountId}
+                - !Sub arn:aws:s3:::textract-demo-output-${AWS::Region}-${AWS::AccountId}/*   
+  PermissionForTextractCallbackToInvokeLambda: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !GetAtt TextractDemoTextractCallbackLambdaFunction.Arn  
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub arn:aws:sns:${AWS::Region}:${AWS::AccountId}:textract-demo-functions-textract-callback 
+  TextractDemoTextractCallbackLambdaFunction:
+    Type: AWS::Lambda::Function
+    Metadata:
+        cfn_nag:
+            rules_to_suppress:
+            - id: W92
+              reason: "Customer will enable reservedconcurrentlimit based on their use case" 
+            - id: W89
+              reason: "This is to demo document processing solution. Customer can update these sample templates to have lambda function deploy in VPC"
+            - id: W58
+              reason: "Lambda functions has permissions to write cloudwatch logs"                  
+    Properties: 
+      FunctionName: textract-demo-functions-TextractCallback
+      Handler: index.lambda_handler
+      Role: !GetAtt TextractDemoTextractCallbackRole.Arn
+      Timeout: 900
+      MemorySize: 1024
+      Environment:
+        Variables:
+          ATTACHMENTS_DYNAMO_TABLE: !Ref DDBRawDataTable
+          OUT_PUT_S3_BUCKET: !Sub textract-demo-output-${AWS::Region}-${AWS::AccountId}  		  
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          import io
+          import csv
+          import re
+          import tempfile
+          from datetime import datetime
+          from collections import defaultdict
+          from collections import OrderedDict
+          ATTACHMENTS_DYNAMO_TABLE = os.environ['ATTACHMENTS_DYNAMO_TABLE']
+          def lambda_handler(sns_payload, context):
+                          print(sns_payload)
+                          if 'Records' not in sns_payload:
+                              raise Exception('No Records section')  
+                          if len(sns_payload['Records']) != 1:
+                              raise Exception('Expected only 1 record')
+                              
+                          sns_message = sns_payload['Records'][0]['Sns']['Message']     
+                          event = json.loads(sns_message)    
+                          email_id = event['JobTag']    
+                          csv1 = ''
+                          rawtexttextract =  ''
+                          patientname = ''
+                          documentresponse = []
+                          kvs = []
+                          blocks = []
+                          next_token = ''
+                          attachment_id = event["DocumentLocation"]['S3ObjectName']  
+                          textract = boto3.client('textract')
+                          s3 = boto3.client('s3')
+                          output_bucket = os.environ["OUT_PUT_S3_BUCKET"]
+                          if event['API'] != 'StartDocumentAnalysis':
+                              raise Exception('Expected API to be StartDocumentAnalysis')
+                          if event['Status'] != 'SUCCEEDED':
+                              raise Exception('Content detection failed, got status: ' + event['Status'])
+                          jobId = event['DocumentLocation']['S3ObjectName']
+                          response = textract.get_document_analysis(
+                              JobId=event['JobId'],
+                              MaxResults=1000
+                          )
+                          next_token = response.get('NextToken')
+                          documentresponse.append(response)
+                          while next_token is not None:
+                              response = textract.get_document_analysis(JobId=event['JobId'], MaxResults=1000, NextToken=next_token)
+                              next_token = response.get('NextToken')
+                              documentresponse.append(response)
+                              
+                          for i in range(len(documentresponse)):
+                              ini_dict1 = documentresponse[i]
+                              blocks.append(ini_dict1['Blocks'])
+                              
+                          key_map, value_map, block_map,csv1,rawtexttextract, kvs  = get_kv_map(blocks)
+                          
+                          file=jobId
+                          bucket =''
+                          keyvalues_folder = 'keyvalues'
+                          bucket = output_bucket
+                          
+                          if(len(kvs)):
+                              patientname = next(v for k,v in kvs.items() if '2. PATIENT' in k)
+                              patientname = patientname[0]
+                              kvfilename = patientname+'_keyvalues.csv'
+                              kv_key = '{}/{}'.format(keyvalues_folder, kvfilename)
+
+                              # Create a temporary file in binary mode to write CSV data
+                              with tempfile.NamedTemporaryFile(mode='w+t', delete=False) as temp_file:
+                                    # writing to csv file
+                                    writerfile = csv.writer(temp_file)
+                                    # writing dictionary keys as headings of csv
+                                    writerfile.writerow(kvs.keys())
+                                    # writing list of dictionary values as rows
+                                    writerfile.writerows(zip(*kvs.values()))
+                                    
+                                    # Rewind the file pointer to the beginning
+                                    temp_file.seek(0)
+                                    # Create a binary stream from the temporary file data
+                                    binary_stream = io.BytesIO(temp_file.read().encode())
+                
+                                    s3.upload_fileobj(binary_stream, bucket, kv_key,ExtraArgs={'ContentType': "text/csv"})
+                                    # temp_file.name, bucket, kv_key, ContentType="text/csv")
+                    
+                              os.remove(temp_file.name)
+                              print("File removed successfully after uploading to S3.")                                
+                          
+                          else:
+                              print("The Key Values Data is empty")                            
+                           
+                          if(len(csv1)):
+                              # Store Processed table Values Data in S3 Bucket
+                              processed_textract_keyvalues_response = s3.put_object(
+                                  Bucket=output_bucket,
+                                  Key='tablevalues/'+ patientname+'tablevalues.csv',
+                                  ContentType="text/csv",
+                                  Body=csv1
+                              )
+                              
+                              if processed_textract_keyvalues_response['ResponseMetadata']['HTTPStatusCode'] == 200:
+                                  print("S3 putObject operation was successful.")    
+                              else:
+                                  print("S3 putObject operation failed.")
+                          else:
+                              print("The Table values data is empty")
+                            
+                          dynamodb = boto3.client('dynamodb')
+                          now = datetime.now()
+                          dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
+                          
+                          item = {
+                              "email_id": {
+                                  "S": email_id
+                              },
+                              "documentname": {
+                                  "S": attachment_id
+                              },
+                              "content": {
+                                  "S": rawtexttextract
+                              },
+                              "timestamp": {
+                                  "S": dt_string
+                              }                  
+                          }
+                          
+                          dynamodb.put_item(
+                              TableName=ATTACHMENTS_DYNAMO_TABLE,
+                              Item=item,
+                              ReturnValues='NONE'
+                          )
+                          
+                          return {
+                              'text': rawtexttextract
+                          }
+                          
+          def get_kv_map(blocks):
+                          
+                          #get key and value maps
+                          csv = ''
+                          csvtext = ''
+                          key_map = {}
+                          value_map = {}
+                          block_map = {}
+                          
+                          blocks_map = {}
+                          table_blocks = []
+                          rawtext = ""
+                          patientext = ''
+                          
+                          for number in blocks:
+                              for block in number:
+                                  block_id = block['Id']
+                                  block_map[block_id] = block
+                                  if block['BlockType'] == "KEY_VALUE_SET":
+                                      if 'KEY' in block['EntityTypes']:
+                                          key_map[block_id] = block
+                                      else:
+                                          value_map[block_id] = block
+                                          
+                          for number in blocks:
+                              for block in number:
+                                  blocks_map[block['Id']] = block
+                                  if block['BlockType'] == "TABLE":
+                                      table_blocks.append(block)
+                          
+                          for number in blocks:
+                              for block in number:
+                                  if block['BlockType'] == 'LINE':
+                                      rawtext += block['Text']+"\n"
+                                      
+                          kvs1 = get_kv_relationship(key_map, value_map, block_map)
+                          patientname = next(v for k,v in kvs1.items() if '2. PATIENT' in k)
+                          patientname = patientname[0]
+                          patientext = re.sub('[^a-zA-Z0-9 \n\.]', '', patientname)
+                          
+                          if len(table_blocks) <= 0:
+                              print("NO Table FOUND")
+                          
+                          else:
+                              for index, table in enumerate(table_blocks):
+                                  csv = generate_table_csv(table, blocks_map, index +1, patientext)
+                                  if len(csv):
+                                      csvtext += csv
+                                      csv += '\n\n'	
+                                  
+                                  
+                          return key_map, value_map, block_map, csvtext, rawtext, kvs1
+                          
+          def get_kv_relationship(key_map, value_map, block_map):
+                          
+                          kvs = defaultdict(list)
+                          new_dict = defaultdict(list)
+                          dict1 = defaultdict(list)
+                          
+                          key_to_be_added =["2. PATIENT","5. PATIENT","CITY","STATE","ZIP CODE","28. TOTAL CHARGE","25. FEDER"]
+                          
+                          for block_id, key_block in key_map.items():
+                              value_block = find_value_block(key_block, value_map)
+                              key = get_text(key_block, block_map)
+                              if len(key) <= 0:
+                                  key = 'No Key'
+                              val = get_text(value_block, block_map)
+                              if len(val) <= 0:
+                                  val = 'No Value' 
+                              kvs[key].append(str(val.strip()))
+                          
+                          for key, value in kvs.items():
+                              for x in key_to_be_added :
+                                  if key.strip().startswith(x):
+                                      new_dict[key] = value
+                                      
+                          dict1 = OrderedDict(sorted(new_dict.items()))
+                          return dict1
+                          
+                          
+          def find_value_block(key_block, value_map):
+                          for relationship in key_block['Relationships']:
+                              if relationship['Type'] == 'VALUE':
+                                  for value_id in relationship['Ids']:
+                                      value_block = value_map[value_id]
+                          return value_block
+                          
+          def get_text(result, blocks_map):
+                          text = ''
+                          if 'Relationships' in result:
+                              for relationship in result['Relationships']:
+                                  if relationship['Type'] == 'CHILD':
+                                      for child_id in relationship['Ids']:
+                                          word = blocks_map[child_id]
+                                          if word['BlockType'] == 'WORD':
+                                              text += word['Text'].replace(",", "") + ' '
+                                          if word['BlockType'] == 'SELECTION_ELEMENT':
+                                              if word['SelectionStatus'] == 'SELECTED':
+                                                  text += 'SELECTED'
+                                              else:
+                                                  text += 'NOT_SELECTED'
+                          text = text.replace('NOT_SELECTEDSELECTED', 'NOT_SELECTED')
+                          return text
+                          
+                          
+          def generate_table_csv(table_result, blocks_map, table_index,patientext):
+                          rows = get_rows_columns_map(table_result, blocks_map)
+                          csv = ''
+                          for row_index, cols in rows.items():
+                              values = []
+                              values = list(cols.values()) 
+                              
+                              if len(values) > 10:
+                                  if len(values) == 21:
+                                      c=[value for key,value in cols.items()]
+                                      c = c[1:]
+                                  else:
+                                      c=[value for key,value in cols.items()]
+                                  
+                                  if not all('' == s or s.isspace() for s in c):
+                                      for item in c:
+                                          item = item.replace( 'NOT_SELECTED', '')
+                                          csv += '{}'.format(item.strip()) + ","                              
+                                      if row_index == 1: 
+                                          csv += 'PATIENT NAME' +'\n'
+                                      elif len(values[19]):
+                                          csv +=  patientext  +'\n'
+                                      else:
+                                          print("No value")
+                                  
+                          return csv
+                          
+          def get_rows_columns_map(table_result, blocks_map):
+                          rows = {}
+                          for relationship in table_result['Relationships']:
+                              if relationship['Type'] == 'CHILD':
+                                  for child_id in relationship['Ids']:
+                                      cell = blocks_map[child_id]
+                                      if cell['BlockType'] == 'CELL':
+                                          row_index = cell['RowIndex']
+                                          col_index = cell['ColumnIndex']
+                                          if row_index not in rows:
+                                              rows[row_index] = {}
+                                              
+                                          rows[row_index][col_index] = get_text(cell, blocks_map)
+                          return rows                              			                            			 	                       			                            			 	                             			                            			 	           			                            			 	     			                            			
+      Runtime: python3.9	  	  
+Outputs:
+  TextractDocUploadS3Bucket:
+    Value: !Ref TextractDocumentUpload
+    Description: Name of the Amazon S3 bucket to upload the documents.
+    Export:
+      Name: TextractDocUploadS3Bucket 	
+  TextractDocumentOutputS3Bucket:
+    Value: !Ref TextractDocumentOutput
+    Description: Name of the Amazon S3 bucket where the extracted content will be uploaded.	
+    Export:
+      Name: TextractDocumentOutputS3Bucket 	
+  S3BucketLogs:
+    Description: S3 Bucket Logs Bucket Name
+    Value: !Ref S3BucketLogs
+    Export:
+      Name:  TextractDocumentS3BucketLogs
