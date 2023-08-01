@@ -4,7 +4,7 @@ This repository contains the sample CloudFormation template for the AWS  blog po
 
 ## Solution Architecture
 
-![Overall Architecture Diagram](./docs/arch-overview.PNG "Overall Architecture Diagram")
+![Overall Architecture Diagram](./images/arch-overview.PNG "Overall Architecture Diagram")
 
 The following section describes the architecture components in the above architecture and how each service functions within the solution. 
 
