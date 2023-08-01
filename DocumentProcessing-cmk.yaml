@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Security: KMS customer managed CMK for AWS services'
+Description: 'Security : KMS customer managed CMK for AWS services'
 Parameters:
   Service:
     Description: 'Which AWS service is allowed to use this CMK (upper-case names define use-cases)'

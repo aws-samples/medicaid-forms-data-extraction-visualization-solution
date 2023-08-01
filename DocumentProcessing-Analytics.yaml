@@ -285,8 +285,7 @@ Resources:
     AthenaQueryS3BucketPolicy:
       Type: 'AWS::S3::BucketPolicy'
       DependsOn: 
-        - AthenaQueryS3Bucket
-        #- LoggingBucket      
+        - AthenaQueryS3Bucket   
       Properties:
         Bucket: !Ref AthenaQueryS3Bucket
         PolicyDocument:

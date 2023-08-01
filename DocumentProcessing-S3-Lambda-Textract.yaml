@@ -64,7 +64,6 @@ Resources:
       BucketEncryption:
               ServerSideEncryptionConfiguration:
                - ServerSideEncryptionByDefault:
-                  #SSEAlgorithm: AES256
                    SSEAlgorithm: 'aws:kms'
                    KMSMasterKeyID: !ImportValue KeyArn   
       AccessControl: BucketOwnerFullControl
@@ -114,7 +113,6 @@ Resources:
       BucketEncryption:
               ServerSideEncryptionConfiguration:
                - ServerSideEncryptionByDefault:
-                  #SSEAlgorithm: AES256
                    SSEAlgorithm: 'aws:kms'
                    KMSMasterKeyID: !ImportValue KeyArn                
       AccessControl: BucketOwnerFullControl
@@ -164,7 +162,6 @@ Resources:
       BucketEncryption:
               ServerSideEncryptionConfiguration:
                - ServerSideEncryptionByDefault:
-                  #SSEAlgorithm: AES256
                    SSEAlgorithm: 'aws:kms'
                    KMSMasterKeyID: !ImportValue KeyArn               
       PublicAccessBlockConfiguration:
