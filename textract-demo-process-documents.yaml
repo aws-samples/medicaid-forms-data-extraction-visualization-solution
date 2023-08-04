@@ -370,7 +370,6 @@ Resources:
           TEXTRACT_NOTIFICATION_TOPIC_ARN: !Ref TextractCallbackSNSTopic
       Code:
         ZipFile: |
-          import json
           import urllib.parse
           import os
           from datetime import datetime
